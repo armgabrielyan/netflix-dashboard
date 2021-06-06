@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 import pandas as pd
+import itertools
 
 netflix = pd.read_csv('../data/netflix_titles.csv')
 netflix.columns = [
@@ -71,8 +72,9 @@ sidebar = html.Div(
         html.Hr(),
         dbc.Nav(
             [
-                dbc.NavLink('Home', href = '/', active = 'exact'),
-                dbc.NavLink('Page 1', href = '/page-1', active = 'exact'),
+                dbc.NavLink('Geospatial distribution', href = '/', active = 'exact'),
+                dbc.NavLink('Categorical features frequency', href = '/cat-feature-frequency', active = 'exact'),
+                dbc.NavLink('Directors and actors insights', href = '/directors-actors-insights', active = 'exact'),
             ],
             vertical = True,
             pills = True,
@@ -129,7 +131,7 @@ def render_page_content(pathname):
             ],
             align = 'center',
         )
-    elif pathname == '/page-1':
+    elif pathname == '/cat-feature-frequency':
         controls = dbc.Card(
             [
                 dbc.FormGroup(
@@ -185,6 +187,44 @@ def render_page_content(pathname):
             [
                 dbc.Col(controls, md = 3),
                 dbc.Col(dcc.Graph(id = 'cat-feature-release-year-bar-plot'), md = 9),
+            ],
+            align = 'center',
+        )
+    elif pathname == '/directors-actors-insights':
+        controls = dbc.Card(
+            [
+                dbc.FormGroup(
+                    [
+                        dbc.Label('Column'),
+                        dcc.Dropdown(
+                            id = 'column-dropdown',
+                            options = [
+                                { 'label': 'Directors', 'value': 'director' },
+                                { 'label': 'Actors', 'value': 'cast' },
+                            ],
+                            value = 'director',
+                            clearable = False,
+                        ),
+                    ]
+                ),
+                dbc.FormGroup(
+                    [
+                        dbc.Label('Options'),
+                        dcc.Dropdown(
+                            id = 'column-options-dropdown',
+                            options = [],
+                            clearable = False,
+                        ),
+                    ]
+                ),
+            ],
+            body = True,
+        )
+
+        return dbc.Row(
+            [
+                dbc.Col(controls, md = 3),
+                dbc.Col(dcc.Graph(id = 'column-options-plot'), md = 9),
             ],
             align = 'center',
         )
@@ -303,6 +343,50 @@ def update_geo_spatial_plot(start_year, end_year):
         color_continuous_scale = px.colors.sequential.amp,
         width = 1200, height = 800
     )
+
+    return fig
+
+@app.callback(
+    Output('column-options-dropdown', 'options'),
+    Input('column-dropdown', 'value'),
+)
+def set_column_options(column):
+    results = []
+
+    if column == 'director':
+        results = list(netflix['director'][~netflix['director'].isnull()])
+    elif column == 'cast':
+        lists_of_actors = list(netflix['cast'].apply(lambda x: x.split(', ') if isinstance(x, str) else []))
+
+        chain = itertools.chain(*lists_of_actors)
+
+        results = list(chain)
+
+    return [{'label': result, 'value': result } for result in results]
+
+@app.callback(
+    Output('column-options-plot', 'figure'),
+    Input('column-dropdown', 'value'),
+    Input('column-options-dropdown', 'value'),
+)
+def update_column_options_barplot(column_value, option_value):
+    filtered_data = netflix[(~netflix[column_value].isnull()) & (netflix[column_value].str.contains(option_value))]
+    count_data = filtered_data.groupby(['release_year'])[['show_id']] \
+            .count() \
+            .rename(columns = { 'show_id': 'count' }) \
+            .reset_index()
+
+    fig = px.bar(
+        count_data,
+        x = 'release_year',
+        y = 'count',
+        title = f'The freqency of Netflix content particpated by {option_value} over years',
+        labels = {
+            'release_year': 'Release year',
+            'count': 'Count',
+        },
+    )
+    fig.update_layout(barmode = 'group')
 
     return fig
 
