@@ -47,6 +47,8 @@ def get_dropdown_label_from_value(dropdown_value, dropdown_options):
 
 app = dash.Dash(__name__, external_stylesheets = [dbc.themes.BOOTSTRAP])
 
+app.title = 'Netflix dashboard'
+
 SIDEBAR_STYLE = {
     'position': 'fixed',
     'top': 0,
