@@ -3,7 +3,10 @@ import dash_core_components as dcc
 import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
+
 import plotly.express as px
+import plotly.graph_objects as go
+
 import pandas as pd
 
 netflix = pd.read_csv('../data/netflix_titles.csv')
@@ -21,6 +24,15 @@ netflix.columns = [
     'listed_in',
     'description',
 ]
+
+country_codes = pd.read_csv('../data/wikipedia-iso-country-codes.csv')
+country_codes = country_codes.rename(
+    {
+        'English short name lower case': 'Country',
+        'Alpha-3 code': 'Code',
+    },
+    axis = 'columns',
+).drop(columns = ['Alpha-2 code', 'Numeric code', 'ISO 3166-2'])
 
 def get_options(column):
     results = sorted(netflix[column].dropna().unique())
@@ -55,11 +67,8 @@ server = app.server
 
 sidebar = html.Div(
     [
-        html.H2('Sidebar', className='display-4'),
+        html.H3('Netflix dashboard'),
         html.Hr(),
-        html.P(
-            'A simple sidebar layout with navigation links', className='lead'
-        ),
         dbc.Nav(
             [
                 dbc.NavLink('Home', href = '/', active = 'exact'),
@@ -86,7 +95,40 @@ app.layout = dbc.Container(
 @app.callback(Output('page-content', 'children'), [Input('url', 'pathname')])
 def render_page_content(pathname):
     if pathname == '/':
-        return html.P('Home page')
+        controls = dbc.Card(
+            [
+                dbc.FormGroup(
+                    [
+                        dbc.Label('Start year'),
+                        dcc.Dropdown(
+                            id = 'start-year-geo',
+                            options = get_options('release_year'),
+                            value = '1925',
+                            clearable = False,
+                        ),
+                    ]
+                ),
+                dbc.FormGroup(
+                    [
+                        dbc.Label('End year'),
+                        dcc.Dropdown(
+                            id = 'end-year-geo',
+                            value = '2021',
+                            clearable = False,
+                        ),
+                    ]
+                ),
+            ],
+            body = True,
+        )
+
+        return dbc.Row(
+            [
+                dbc.Col(controls, md = 2),
+                dbc.Col(dcc.Graph(id = 'geospatial-plot'), md = 10),
+            ],
+            align = 'center',
+        )
     elif pathname == '/page-1':
         controls = dbc.Card(
             [
@@ -141,8 +183,8 @@ def render_page_content(pathname):
 
         return dbc.Row(
             [
-                dbc.Col(controls, md = 4),
-                dbc.Col(dcc.Graph(id = 'cat-feature-release-year-bar-plot'), md = 8),
+                dbc.Col(controls, md = 3),
+                dbc.Col(dcc.Graph(id = 'cat-feature-release-year-bar-plot'), md = 9),
             ],
             align = 'center',
         )
@@ -160,7 +202,6 @@ def render_page_content(pathname):
     Input('start-year', 'value'),
 )
 def set_end_year(available_year_options, selected_year):
-    print('available_year_options', available_year_options)
     start_index = available_year_options.index({'label': int(selected_year), 'value': int(selected_year) })
 
     return available_year_options[start_index:]
@@ -208,7 +249,7 @@ def update_barplot(feature_value, feature_options, start_year, end_year, categor
         x = 'release_year',
         y = 'count',
         color = feature_value,
-        title = f'The number of cinematic works released over years based on {feature_label.lower()}',
+        title = f'The freqency of Netflix content released over years based on {feature_label.lower()}',
         labels = {
             'release_year': 'Release year',
             'count': 'Count',
@@ -216,6 +257,52 @@ def update_barplot(feature_value, feature_options, start_year, end_year, categor
         },
     )
     fig.update_layout(barmode = 'group')
+
+    return fig
+
+@app.callback(
+    Output('end-year-geo', 'options'),
+    Input('start-year-geo', 'options'),
+    Input('start-year-geo', 'value'),
+)
+def set_end_year(available_year_options, selected_year):
+    start_index = available_year_options.index({'label': int(selected_year), 'value': int(selected_year) })
+
+    return available_year_options[start_index:]
+
+@app.callback(
+    Output('geospatial-plot', 'figure'),
+    Input('start-year-geo', 'value'),
+    Input('end-year-geo', 'value'),
+)
+def update_geo_spatial_plot(start_year, end_year):
+    columns_to_keep = list(netflix.columns)
+    columns_to_keep.remove('country')
+
+    filtered_data = netflix[(netflix['release_year'] >= int(start_year)) & (netflix['release_year'] <= int(end_year))]
+
+    long_netflix = filtered_data.set_index(columns_to_keep).apply(lambda x: x.str.split(',').explode()).reset_index()
+    long_netflix['country'] = long_netflix['country'].str.lstrip()
+
+    country_frequency = pd.DataFrame(long_netflix['country'].value_counts()).reset_index()
+    country_frequency.columns = ['Country', 'Frequency']
+
+    location = pd.merge(
+        country_frequency,
+        country_codes[country_codes['Country'].isin(country_frequency['Country'])],
+        how = 'left',
+        on = ['Country'],
+    )
+
+    fig = px.choropleth(
+        location,
+        locations = 'Code',
+        color = 'Frequency',
+        hover_name = 'Country',
+        title = 'The freqency of Netflix content released over years based on location',
+        color_continuous_scale = px.colors.sequential.amp,
+        width = 1200, height = 800
+    )
 
     return fig
 
