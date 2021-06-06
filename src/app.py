@@ -34,54 +34,125 @@ def get_dropdown_label_from_value(dropdown_value, dropdown_options):
 
 app = dash.Dash(__name__, external_stylesheets = [dbc.themes.BOOTSTRAP])
 
+SIDEBAR_STYLE = {
+    'position': 'fixed',
+    'top': 0,
+    'left': 0,
+    'bottom': 0,
+    'width': '16rem',
+    'padding': '2rem 1rem',
+    'background-color': '#f8f9fa',
+}
+
+
+CONTENT_STYLE = {
+    'margin-left': '18rem',
+    'margin-right': '2rem',
+    'padding': '2rem 1rem',
+}
+
 server = app.server
 
-app.layout = dbc.Container([
-    html.Div([
-        dbc.Row(
-            dbc.Col(
-                dcc.Graph(id = 'rating-release_year-bar-plot'),
-            )
+sidebar = html.Div(
+    [
+        html.H2('Sidebar', className='display-4'),
+        html.Hr(),
+        html.P(
+            'A simple sidebar layout with navigation links', className='lead'
         ),
-        dbc.Row(
+        dbc.Nav(
             [
-                dbc.Col(
-                    dcc.Dropdown(
-                        id = 'feature-dropdown',
-                        options = [
-                            { 'label': 'Cinematic type', 'value': 'cinematic_type' },
-                            { 'label': 'Rating', 'value': 'rating' },
-                        ],
-                        value = 'cinematic_type',
-                        clearable = False,
-                    ),
+                dbc.NavLink('Home', href = '/', active = 'exact'),
+                dbc.NavLink('Page 1', href = '/page-1', active = 'exact'),
+            ],
+            vertical = True,
+            pills = True,
+        ),
+    ],
+    style = SIDEBAR_STYLE,
+)
+
+content = html.Div(id = 'page-content', style = CONTENT_STYLE)
+
+app.layout = dbc.Container(
+    [
+        dcc.Location(id = 'url'),
+        sidebar,
+        content
+    ],
+    fluid = True,
+)
+
+@app.callback(Output('page-content', 'children'), [Input('url', 'pathname')])
+def render_page_content(pathname):
+    if pathname == '/':
+        return html.P('Home page')
+    elif pathname == '/page-1':
+        controls = dbc.Card(
+            [
+                dbc.FormGroup(
+                    [
+                        dbc.Label('Categorical feature'),
+                        dcc.Dropdown(
+                            id = 'feature-dropdown',
+                            options = [
+                                { 'label': 'Cinematic type', 'value': 'cinematic_type' },
+                                { 'label': 'Rating', 'value': 'rating' },
+                            ],
+                            value = 'cinematic_type',
+                            clearable = False,
+                        ),
+                    ]
                 ),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id = 'categories-dropdown',
-                        multi = True,
-                        clearable = False,
-                    ),
+                dbc.FormGroup(
+                    [
+                        dbc.Label('Categories'),
+                        dcc.Dropdown(
+                            id = 'categories-dropdown',
+                            multi = True,
+                            clearable = False,
+                        ),
+                    ]
                 ),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id = 'start-year',
-                        options = get_options('release_year'),
-                        value = '2001',
-                        clearable = False,
-                    ),
+                dbc.FormGroup(
+                    [
+                        dbc.Label('Start year'),
+                        dcc.Dropdown(
+                            id = 'start-year',
+                            options = get_options('release_year'),
+                            value = '2001',
+                            clearable = False,
+                        ),
+                    ]
                 ),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id = 'end-year',
-                        value = '2021',
-                        clearable = False,
-                    ),
+                dbc.FormGroup(
+                    [
+                        dbc.Label('End year'),
+                        dcc.Dropdown(
+                            id = 'end-year',
+                            value = '2021',
+                            clearable = False,
+                        ),
+                    ]
                 ),
             ],
-        ),
-    ]),
-])
+            body = True,
+        )
+
+        return dbc.Row(
+            [
+                dbc.Col(controls, md = 4),
+                dbc.Col(dcc.Graph(id = 'cat-feature-release-year-bar-plot'), md = 8),
+            ],
+            align = 'center',
+        )
+    return dbc.Jumbotron(
+        [
+            html.H1('404: Not found', className = 'text-danger'),
+            html.Hr(),
+            html.P(f'The pathname {pathname} was not recognised...'),
+        ]
+    )
 
 @app.callback(
     Output('end-year', 'options'),
@@ -89,6 +160,7 @@ app.layout = dbc.Container([
     Input('start-year', 'value'),
 )
 def set_end_year(available_year_options, selected_year):
+    print('available_year_options', available_year_options)
     start_index = available_year_options.index({'label': int(selected_year), 'value': int(selected_year) })
 
     return available_year_options[start_index:]
@@ -105,10 +177,12 @@ def set_feature_category_options(feature):
     Input('categories-dropdown', 'options'),
 )
 def set_feature_category_value(categories):
-    return [categories[0]['value'], categories[1]['value']]
+    category_values = list(map(lambda category: category['value'], categories))
+
+    return category_values[:2]
 
 @app.callback(
-    Output('rating-release_year-bar-plot', 'figure'),
+    Output('cat-feature-release-year-bar-plot', 'figure'),
     Input('feature-dropdown', 'value'),
     Input('feature-dropdown', 'options'),
     Input('start-year', 'value'),
@@ -117,9 +191,9 @@ def set_feature_category_value(categories):
 )
 def update_barplot(feature_value, feature_options, start_year, end_year, categories):
     count_data = netflix.groupby(['release_year', feature_value])[['show_id']] \
-              .count() \
-              .rename(columns = { 'show_id': 'count' }) \
-              .reset_index()
+            .count() \
+            .rename(columns = { 'show_id': 'count' }) \
+            .reset_index()
 
     filtered_data = count_data[
         (count_data['release_year'] >= int(start_year)) &
