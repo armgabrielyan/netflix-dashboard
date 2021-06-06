@@ -6,7 +6,7 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import pandas as pd
 
-netflix = pd.read_csv('data/netflix_titles.csv')
+netflix = pd.read_csv('../data/netflix_titles.csv')
 
 type_data = netflix.groupby(['release_year', 'type'])[['show_id']] \
               .count() \
@@ -29,6 +29,8 @@ def get_rating_options():
     return [{'label': rating, 'value': rating } for rating in ratings]
 
 app = dash.Dash(__name__, external_stylesheets = [dbc.themes.BOOTSTRAP])
+
+server = app.server
 
 app.layout = dbc.Container([
     html.Div([
