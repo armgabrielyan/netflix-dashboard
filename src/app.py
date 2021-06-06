@@ -7,59 +7,36 @@ import plotly.express as px
 import pandas as pd
 
 netflix = pd.read_csv('../data/netflix_titles.csv')
+netflix.columns = [
+    'show_id',
+    'cinematic_type',
+    'title',
+    'director',
+    'cast',
+    'country',
+    'date_added',
+    'release_year',
+    'rating',
+    'duration',
+    'listed_in',
+    'description',
+]
 
-type_data = netflix.groupby(['release_year', 'type'])[['show_id']] \
-              .count() \
-              .rename(columns = { 'show_id': 'count' }) \
-              .reset_index()
+def get_options(column):
+    results = sorted(netflix[column].dropna().unique())
 
-rating_data = netflix.groupby(['release_year', 'rating'])[['show_id']] \
-              .count() \
-              .rename(columns = { 'show_id': 'count' }) \
-              .reset_index()
+    return [{'label': result, 'value': result } for result in results]
 
-def get_year_options():
-    years = sorted(netflix['release_year'].unique())
+def get_dropdown_label_from_value(dropdown_value, dropdown_options):
+    dropdown_label = [x['label'] for x in dropdown_options if x['value'] == dropdown_value]
 
-    return [{'label': year, 'value': year } for year in years]
-
-def get_rating_options():
-    ratings = sorted(netflix['rating'].dropna().unique())
-
-    return [{'label': rating, 'value': rating } for rating in ratings]
+    return dropdown_label[0]
 
 app = dash.Dash(__name__, external_stylesheets = [dbc.themes.BOOTSTRAP])
 
 server = app.server
 
 app.layout = dbc.Container([
-    html.Div([
-        dbc.Row(
-            dbc.Col(
-                dcc.Graph(id = 'movie-tv-shows-count-bar-plot'),
-            )
-        ),
-        dbc.Row(
-            [
-                dbc.Col(
-                    dcc.Dropdown(
-                        id = 'start-year-1',
-                        options = get_year_options(),
-                        value = '2001',
-                        clearable = False,
-                    ),
-                ),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id = 'end-year-1',
-                        options = [],
-                        value = '2021',
-                        clearable = False,
-                    ),
-                ),
-            ],
-        ),
-    ]),
     html.Div([
         dbc.Row(
             dbc.Col(
@@ -70,103 +47,98 @@ app.layout = dbc.Container([
             [
                 dbc.Col(
                     dcc.Dropdown(
-                        id = 'start-year-2',
-                        options = get_year_options(),
+                        id = 'feature-dropdown',
+                        options = [
+                            { 'label': 'Cinematic type', 'value': 'cinematic_type' },
+                            { 'label': 'Rating', 'value': 'rating' },
+                        ],
+                        value = 'cinematic_type',
+                        clearable = False,
+                    ),
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id = 'categories-dropdown',
+                        multi = True,
+                        clearable = False,
+                    ),
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id = 'start-year',
+                        options = get_options('release_year'),
                         value = '2001',
                         clearable = False,
                     ),
                 ),
                 dbc.Col(
                     dcc.Dropdown(
-                        id = 'end-year-2',
-                        options = [],
+                        id = 'end-year',
                         value = '2021',
                         clearable = False,
                     ),
                 ),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id = 'rating-dropdown',
-                        options = get_rating_options(),
-                        value=['TV-MA', 'R'],
-                        multi = True,
-                        clearable = False,
-                    ),
-                )
             ],
         ),
     ]),
 ])
 
 @app.callback(
-    Output('end-year-1', 'options'),
-    Input('start-year-1', 'options'),
-    Input('start-year-1', 'value'),
+    Output('end-year', 'options'),
+    Input('start-year', 'options'),
+    Input('start-year', 'value'),
 )
-def set_cities_value(available_year_options, selected_year):
+def set_end_year(available_year_options, selected_year):
     start_index = available_year_options.index({'label': int(selected_year), 'value': int(selected_year) })
 
     return available_year_options[start_index:]
 
 @app.callback(
-    Output('movie-tv-shows-count-bar-plot', 'figure'),
-    Input('start-year-1', 'value'),
-    Input('end-year-1', 'value'),
+    Output('categories-dropdown', 'options'),
+    Input('feature-dropdown', 'value'),
 )
-def update_figure1(start_year, end_year):
-    filtered_data = type_data[
-        (type_data['release_year'] >= int(start_year)) & (type_data['release_year'] <= int(end_year))
-    ]
-
-    fig = px.bar(
-        filtered_data,
-        x = 'release_year',
-        y = 'count',
-        color = 'type',
-        title = 'The number of movies and TV shows released over years',
-        labels = {
-            'release_year': 'Release year',
-            'count': 'Count',
-            'type': 'Type',
-        },
-    )
-    fig.update_layout(barmode = 'group')
-
-    return fig
+def set_feature_category_options(feature):
+    return get_options(feature)
 
 @app.callback(
-    Output('end-year-2', 'options'),
-    Input('start-year-2', 'options'),
-    Input('start-year-2', 'value'),
+    Output('categories-dropdown', 'value'),
+    Input('categories-dropdown', 'options'),
 )
-def set_cities_value(available_year_options, selected_year):
-    start_index = available_year_options.index({'label': int(selected_year), 'value': int(selected_year) })
-
-    return available_year_options[start_index:]
+def set_feature_category_value(categories):
+    return [categories[0]['value'], categories[1]['value']]
 
 @app.callback(
     Output('rating-release_year-bar-plot', 'figure'),
-    Input('start-year-2', 'value'),
-    Input('end-year-2', 'value'),
-    [dash.dependencies.Input('rating-dropdown', 'value')]
+    Input('feature-dropdown', 'value'),
+    Input('feature-dropdown', 'options'),
+    Input('start-year', 'value'),
+    Input('end-year', 'value'),
+    [dash.dependencies.Input('categories-dropdown', 'value')],
 )
-def update_figure2(start_year, end_year, ratings):
-    filtered_data = rating_data[
-        (rating_data['release_year'] >= int(start_year)) &
-        (rating_data['release_year'] <= int(end_year)) &
-        (rating_data['rating'].isin(ratings))
+def update_barplot(feature_value, feature_options, start_year, end_year, categories):
+    count_data = netflix.groupby(['release_year', feature_value])[['show_id']] \
+              .count() \
+              .rename(columns = { 'show_id': 'count' }) \
+              .reset_index()
+
+    filtered_data = count_data[
+        (count_data['release_year'] >= int(start_year)) &
+        (count_data['release_year'] <= int(end_year)) &
+        (count_data[feature_value].isin(categories))
     ]
+
+    feature_label = get_dropdown_label_from_value(feature_value, feature_options)
 
     fig = px.bar(
         filtered_data,
         x = 'release_year',
         y = 'count',
-        color = 'rating',
-        title = 'The number of cinematic works released over years based on rating',
+        color = feature_value,
+        title = f'The number of cinematic works released over years based on {feature_label.lower()}',
         labels = {
             'release_year': 'Release year',
             'count': 'Count',
-            'rating': 'Rating',
+            feature_value: feature_label,
         },
     )
     fig.update_layout(barmode = 'group')
